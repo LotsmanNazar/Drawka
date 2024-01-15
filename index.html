@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Drawka</title>
+	<meta charset="UTF8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" type="text/css" href="public/assets/css/style.css">
+	<link rel="icon" type="image/x-icon" href="public/assets/img/favicon.jpg">
+</head>
+<body class="game-page">
+	<div class="game-app-wrapper" ref="appWrapper">
+		<div class="game-main-wrapper" ref="appPagesWrapper" :data-page="currentPage">
+			<div class="game-page-wrapper game-page-loading" ref="pageLoading">
+				<div class="game-content">
+					<div class="game-loading-main-wrapper">
+						<div class="game-widget-wrapper game-loading-wrapper">
+							<div class="game-widget-title-wrapper game-loading-title-wrapper">
+								<h3 class="game-widget-title game-loading-title">{{ getTranslate('Loading') }}</h3>
+							</div>
+							<div class="game-widget-content game-loading-content">
+								<p>{{ getTranslate('Loading...') }}</p>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="game-page-wrapper game-page-enter" ref="pageEnter">
+				<div class="game-content">
+					<div class="game-nickname-main-wrapper">
+						<div class="game-widget-wrapper game-nickname-wrapper">
+							<div class="game-widget-title-wrapper game-nickname-title-wrapper">
+								<h3 class="game-widget-title game-nickname-title">{{ getTranslate('Your nickname') }}</h3>
+							</div>
+							<div class="game-widget-content game-nickname-content">
+								<p>{{ getTranslate('Nickname can contain from 3 to 12 characters.') }}</p>
+								<form class="game-nickname-field-wrapper" v-on:submit="socketConnect($event)">
+									<input type="text" name="nickname" ref="nickname" />
+									<button class="game-button game-play" type="submit">{{ getTranslate('Play') }}</button>
+								</form>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="game-page-wrapper game-page-rooms" ref="pageRooms">
+				<div class="game-content">
+					<div class="game-rooms-info-wrapper">
+						<div class="game-widget-wrapper game-rooms-info">
+							<div class="game-widget-title-wrapper game-rooms-info-title-wrapper">
+								<h3 class="game-widget-title game-rooms-info-title">{{ getTranslate('Rooms') }}</h3>
+							</div>
+							<div class="game-widget-content game-rooms-info-content">
+								<p>{{ getTranslate('Hello, %nickname%. Below is a list with rooms, select the room that suits your needs and play. If there are no rooms or you haven\'t found a suitable one, then create a new room.', {'%nickname%': player.nickname}) }}</p>
+								<button class="game-button" v-on:click="App.getServicesLocator().get('Route').redirect('pageCreateRoom');">{{ getTranslate('Create room') }}</button>
+								<button class="game-button game-button-underline" v-on:click="changeNickname()">{{ getTranslate('Change nickname') }}</button>
+							</div>
+						</div>
+					</div>
+					<div class="game-rooms-main-wrapper">
+						<div class="game-rooms-wrapper" ref="roomsWrapper">
+							<div class="game-room-wrapper" v-for="room in rooms">
+								<div class="game-widget-wrapper game-room" :data-status="room.status" :data-full="room.playersCount == room.maxPlayers">
+									<div class="game-widget-title-wrapper game-room-title-wrapper">
+										<h3 class="game-widget-title game-room-title">{{ getTranslate('Room') }} #{{ room.ID.substr(0, 3) }}</h3>
+									</div>
+									<div class="game-widget-content game-room-content">
+										<ul>
+											<li>{{ getTranslate('Round') }}: {{ room.round }}/{{ room.maxRounds }}</li>
+											<li>{{ getTranslate('Players') }}: {{ room.playersCount }}/{{ room.maxPlayers }}</li>
+											<li>{{ getTranslate('Game status') }}: <span :class="'game-status-' + room.status">{{ getTranslate(room.status.replace('-', ' ')) }}</span></li>
+											<li>{{ getTranslate('Language') }}: {{ getLang(room.lang) }}</li>
+										</ul>
+										<div class="game-room-enter-wrapper">
+											<button type="button" class="game-button game-room-enter" v-on:click="enterRoom($event)" :data-id="room.ID">{{ getTranslate('Enter') }}</button>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="game-page-wrapper game-page-room" ref="pageRoom" :data-round-started="Number(room.roundStarted)">
+				<div class="game-content">
+					<div class="game-info-left">
+						<div class="game-draw-main-wrapper">
+							<div class="game-draw-wrapper">
+								<div class="game-controls-wrapper">
+									<div class="game-status-wrapper">
+										<div class="game-status-item game-guess-status">
+											<h3 class="game-status-title" :style="{'display': ( room.drawer == player.ID ) ? 'block' : 'none'}">{{ getTranslate('You drawing') }}: {{ room.word }}</h3>
+											<h3 class="game-status-title" :style="{'display': ( room.drawer != player.ID ) ? 'block' : 'none'}">{{ getTranslate('You guess') }}</h3>
+										</div>
+										<div class="game-status-item game-round-wrapper">
+											<span class="game-round">{{ getTranslate('Round') }} <span>{{ room.round }}/{{ room.maxRounds }}</span></span>
+										</div>
+										<div class="game-status-item game-status-timer">
+											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-licnse="https://fontawesome.com/license/free"><path d="M256 512C114.6 512 0 397.4 0 256S114.6 0 256 0S512 114.6 512 256s-114.6 256-256 256zM232 120V256c0 8 4 15.5 10.7 20l96 64c11 7.4 25.9 4.4 33.3-6.7s4.4-25.9-6.7-33.3L280 243.2V120c0-13.3-10.7-24-24-24s-24 10.7-24 24z"/></svg>
+											<span class="game-timer-value">{{ ( room.RoundTimer ) ? getTranslate(room.RoundTimer.getTime()) : '' }}</span>
+										</div>
+										<div class="game-status-item game-word-wrapper" :style="{'display': ( room.drawer != player.ID ) ? 'flex' : 'none'}">
+											<span v-for="letter in room.word">{{ letter }}</span>
+										</div>
+										<div class="game-status-item game-draw-controls" :style="{'display': ( room.drawer == player.ID ) ? 'flex' : 'none'}">
+											<div class="game-draw-colors">
+												<span class="game-colors-icon" ref="currentColor">
+													<span class="game-current-color" :style="{'background-color': drawColor}"></span>
+													<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-licnse="https://fontawesome.com/license/free"><path d="M512 256c0 .9 0 1.8 0 2.7c-.4 36.5-33.6 61.3-70.1 61.3H344c-26.5 0-48 21.5-48 48c0 3.4 .4 6.7 1 9.9c2.1 10.2 6.5 20 10.8 29.9c6.1 13.8 12.1 27.5 12.1 42c0 31.8-21.6 60.7-53.4 62c-3.5 .1-7 .2-10.6 .2C114.6 512 0 397.4 0 256S114.6 0 256 0S512 114.6 512 256zM128 288c0-17.7-14.3-32-32-32s-32 14.3-32 32s14.3 32 32 32s32-14.3 32-32zm0-96c17.7 0 32-14.3 32-32s-14.3-32-32-32s-32 14.3-32 32s14.3 32 32 32zM288 96c0-17.7-14.3-32-32-32s-32 14.3-32 32s14.3 32 32 32s32-14.3 32-32zm96 96c17.7 0 32-14.3 32-32s-14.3-32-32-32s-32 14.3-32 32s14.3 32 32 32z"/></svg>
+												</span>
+												<span class="game-draw-color-wrapper" v-for="value in drawColors" :style="{'background-color': value}">
+													<button type="button" class="game-draw-color" :data-color="value" v-on:click="changeColor($event)" :style="{'background-color': value}" :data-active="value == drawColor"></button>
+												</span>
+											</div>
+
+											<div class="game-brush-sizes">
+												<span class="game-brush-icon">
+													<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" data-licnse="https://fontawesome.com/license/free"><path d="M192 64L160 0H128L96 64 64 0H48C21.5 0 0 21.5 0 48V256H384V48c0-26.5-21.5-48-48-48H224L192 64zM0 288v32c0 35.3 28.7 64 64 64h64v64c0 35.3 28.7 64 64 64s64-28.7 64-64V384h64c35.3 0 64-28.7 64-64V288H0zM192 464c-8.8 0-16-7.2-16-16s7.2-16 16-16s16 7.2 16 16s-7.2 16-16 16z"/></svg>
+												</span>
+												<button type="button" class="game-brush" v-for="value in drawBrushes" :class="'game-brush-' + value.size" :data-size="value.sizeValue" v-on:click="changeBrush($event)" :data-active="value.sizeValue == drawBrushSize"></button>
+											</div>
+										</div>
+									</div>
+								</div>
+								
+								<div id="game-draw-wrapper" class="game-draw" ref="drawWrapper" v-on:mousedown="startDraw" v-on:mouseup="endDraw($event)" v-on:mousemove="draw($event)" v-on:mouseover="drawActive = false" v-on:touchstart="drawTouchStart" v-on:touchmove="drawTouchMove($event)" v-on:touchend="drawTouchEnd">
+									<canvas id="game-draw" ref="draw"></canvas>
+								</div>
+							</div>
+
+							<div class="game-waiting-main-wrapper" ref="gameStartTimer" :style="{'display': ( room.status == 'not-started' || (room.word === undefined && room.drawer != player.ID ) ) ? 'block' : 'none'}">
+								<div class="game-waiting-wrapper">
+									<div class="game-waiting-content">
+										<h4 class="game-waiting-title">{{ getTranslate('Waiting for the game to start') }}</h4>
+										<div class="game-waiting-timer-wrapper">
+											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-licnse="https://fontawesome.com/license/free"><path d="M256 512C114.6 512 0 397.4 0 256S114.6 0 256 0S512 114.6 512 256s-114.6 256-256 256zM232 120V256c0 8 4 15.5 10.7 20l96 64c11 7.4 25.9 4.4 33.3-6.7s4.4-25.9-6.7-33.3L280 243.2V120c0-13.3-10.7-24-24-24s-24 10.7-24 24z"/></svg>
+											<span class="game-waiting-timer">{{ ( room.StartGameTimer ) ? getTranslate(room.StartGameTimer.getTime()) : '' }}</span>
+										</div>
+										<button class="game-button game-button-start-game" :style="{'display': ( room.status != 'started' && room.playersCount >= 2 && room.admin == player.ID ) ? 'block' : 'none'}" v-on:click="startGame">{{ getTranslate('Start game') }}</button>
+									</div>
+								</div>
+							</div>
+
+							<div class="game-waiting-main-wrapper" ref="gameStartTimer" :style="{'display':
+								(
+									room.status == 'started' &&
+									room.drawer != player.ID &&
+									!room.roundStarted &&
+									room.round != room.maxRounds
+								) ? 'block' : 'none'}">
+								<div class="game-waiting-wrapper">
+									<div class="game-waiting-content">
+										<h4 class="game-waiting-title">{{ getTranslate('Waiting for the round %round% to start', {'%round%': room.round + 1}) }}</h4>
+										<div class="game-waiting-timer-wrapper">
+											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-licnse="https://fontawesome.com/license/free"><path d="M256 512C114.6 512 0 397.4 0 256S114.6 0 256 0S512 114.6 512 256s-114.6 256-256 256zM232 120V256c0 8 4 15.5 10.7 20l96 64c11 7.4 25.9 4.4 33.3-6.7s4.4-25.9-6.7-33.3L280 243.2V120c0-13.3-10.7-24-24-24s-24 10.7-24 24z"/></svg>
+											<span class="game-waiting-timer">{{ ( room.StartGameTimer ) ? getTranslate(room.StartGameTimer.getTime()) : '' }}</span>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							<div class="game-select-word-main-wrapper" ref="gameSelectWord" :style="{'display': ( room.word === undefined ) ? 'block' : 'none'}">
+								<div class="game-select-word-wrapper">
+									<div class="game-select-word-content">
+										<h4 class="game-select-word-title">{{ getTranslate('Select Word') }}</h4>
+										<div class="game-select-word-timer-wrapper">
+											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-licnse="https://fontawesome.com/license/free"><path d="M256 512C114.6 512 0 397.4 0 256S114.6 0 256 0S512 114.6 512 256s-114.6 256-256 256zM232 120V256c0 8 4 15.5 10.7 20l96 64c11 7.4 25.9 4.4 33.3-6.7s4.4-25.9-6.7-33.3L280 243.2V120c0-13.3-10.7-24-24-24s-24 10.7-24 24z"/></svg>
+											<span class="game-select-word-timer">{{ ( room.StartGameTimer ) ? getTranslate(room.StartGameTimer.getTime()) : '' }}</span>
+										</div>
+
+										<div class="game-select-words">
+											<span class="game-select-word game-button" v-for="word in room.words" v-on:click="selectWord" :data-word="word">{{ word }}</span>
+										</div>
+									</div>
+								</div>
+							</div>
+
+						</div>
+						<div class="game-chat-main-wrapper">
+							<div class="game-chat-wrapper">
+								<div class="game-chat">
+									<div class="game-chat-title-wrapper">
+										<h3 class="game-chat-title">{{ getTranslate('Chat') }}</h3>
+									</div>
+									<div class="game-chat-content-wrapper">
+										
+										<div class="game-chat-fields-wrapper" :data-drawer="Number(room.drawer == player.ID)">
+											<form class="game-chat-fields" ref="chatForm">
+												<div class="game-chat-field-wrapper">
+													<span class="game-chat-field-label">{{ getTranslate('Drawing looks like') }} <span class="game-chat-count-letter">({{ ( room.word !== undefined ) ? room.word.length : 0 }} {{ getTranslate('letters') }}):</span></span>
+													<input class="game-chat-field" type="text" ref="chatField" />
+													<button class="game-chat-submit" type="submit">{{ getTranslate('Send') }}</button>
+												</div>
+											</form>
+										</div>
+										<div class="game-chat-content" :data-drawer="Number(room.drawer == player.ID)" ref="chat"></div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="game-info-right">
+						<div class="game-info-wrapper">
+							<div class="game-info game-players-wrapper">
+								<div class="game-info-title-wrapper">
+									<h3 class="game-info-title">{{ getTranslate('Players') }} {{ room.playersCount }}/{{ room.maxPlayers }}</h3>
+								</div>
+								<div class="game-info-content game-players">
+									<div class="game-player-wrapper" v-for="roomPlayer in room.players">
+										<span class="game-player-drawer" :style="{'display': ( room.drawer == roomPlayer.id ) ? 'flex' : 'none'}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" data-license="https://fontawesome.com/license/free"><path d="M162.4 6c-1.5-3.6-5-6-8.9-6h-19c-3.9 0-7.5 2.4-8.9 6L104.9 57.7c-3.2 8-14.6 8-17.8 0L66.4 6c-1.5-3.6-5-6-8.9-6H48C21.5 0 0 21.5 0 48V224v22.4V256H9.6 374.4 384v-9.6V224 48c0-26.5-21.5-48-48-48H230.5c-3.9 0-7.5 2.4-8.9 6L200.9 57.7c-3.2 8-14.6 8-17.8 0L162.4 6zM0 288v32c0 35.3 28.7 64 64 64h64v64c0 35.3 28.7 64 64 64s64-28.7 64-64V384h64c35.3 0 64-28.7 64-64V288H0zM192 432a16 16 0 1 1 0 32 16 16 0 1 1 0-32z"/></svg></span>
+										<div class="game-player">
+											<div class="game-player-image">
+												<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" data-license="https://fontawesome.com/license/free"><path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512H418.3c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304H178.3z"/></svg>
+											</div>
+											<div class="game-player-data">
+												<span class="game-player-nickname">{{ roomPlayer.nickname }}</span>
+												<span class="game-player-points">{{ roomPlayer.points }}</span>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="game-settings-main-wrapper">
+					<div class="game-settings-wrapper">
+						<button type="button" class="game-settings">
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-license="https://fontawesome.com/license/free"><path d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336c44.2 0 80-35.8 80-80s-35.8-80-80-80s-80 35.8-80 80s35.8 80 80 80z"/></svg>
+						</button>
+						<button type="button" class="game-settings" v-on:click="leaveRoom">
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-license="https://fontawesome.com/license/free"><path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z"/></svg>
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<div class="game-page-wrapper game-page-create-room" ref="pageCreateRoom">
+				<div class="game-content">
+					<div class="game-create-room-wrapper">
+						<div class="game-widget-wrapper game-create-room">
+							<div class="game-widget-title-wrapper game-create-room-title-wrapper">
+								<h3 class="game-widget-title game-create-room-title">{{ getTranslate('Room settings') }}</h3>
+								<button class="game-close-page" v-on:click="App.ServicesLocator.get('Route').redirect('pageRooms')">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512" data-license="https://fontawesome.com/license/free"><path d="M310.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L160 210.7 54.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L114.7 256 9.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L160 301.3 265.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L205.3 256 310.6 150.6z"/></svg>
+								</button>
+							</div>
+							<div class="game-widget-content game-create-room-content">
+								<div class="game-settings-field-wrapper">
+									<h4 class="game-room-settings-label">{{ getTranslate('Number of players') }}</h4>
+									<div class="game-room-settings-number">
+										<input class="game-settings-field" name="maxPlayers" type="number" min="2" max="10" value="2" /> / <span>10</span>
+									</div>
+								</div>
+
+								<div class="game-settings-field-wrapper">
+									<h4 class="game-room-settings-label">{{ getTranslate('Number of rounds') }}</h4>
+									<div class="game-room-settings-number">
+										<input class="game-settings-field" name="maxRounds" type="number" min="2" max="10" value="2" /> / <span>10</span>
+									</div>
+								</div>
+
+								<div class="game-settings-field-wrapper">
+									<h4 class="game-room-settings-label">{{ getTranslate('Language (words)') }}</h4>
+									<div class="game-room-settings-select">
+										<select class="game-settings-field" name="lang">
+											<option value="ru" :selected="checkLang('ru')">русский</option>
+											<option value="en" :selected="checkLang('en')">english</option>
+										</select>
+									</div>
+								</div>
+
+								<div class="game-settings-field-wrapper">
+									<h4 class="game-room-settings-label">{{ getTranslate('Private room') }}</h4>
+									<div class="game-room-settings-select">
+										<select class="game-settings-field" name="private">
+											<option value="no" selected="selected">{{ getTranslate('No') }}</option>
+											<option value="yes">{{ getTranslate('Yes') }}</option>
+										</select>
+									</div>
+								</div>
+
+								<div class="game-settings-field-wrapper">
+									<button class="game-button" v-on:click="createRoom">{{ getTranslate('Create room') }}</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="game-page-wrapper game-page-end-game" ref="pageEndGame">
+				<div class="game-content">
+					<div class="game-end-game-wrapper">
+						<div class="game-widget-wrapper game-end-game">
+							<div class="game-widget-title-wrapper game-end-game-title-wrapper">
+								<h3 class="game-widget-title game-end-game-title">{{ getTranslate('End Game') }}</h3>
+								<button class="game-close-page" v-on:click="pageReload(true)">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512" data-license="https://fontawesome.com/license/free"><path d="M310.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L160 210.7 54.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L114.7 256 9.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L160 301.3 265.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L205.3 256 310.6 150.6z"/></svg>
+								</button>
+							</div>
+							<div class="game-widget-content game-end-game-content">
+								<div class="game-end-game-player-main-wrapper">
+									<div class="game-end-game-player-wrapper" v-for="player in room.players">
+										<div class="game-end-game-player">
+											<div class="game-end-game-player-data">
+												<span class="game-end-game-player-nickname">{{ player.nickname }}</span>
+												<span class="game-end-game-player-points">{{ player.points }}</span>
+											</div>
+										</div>
+									</div>
+								</div>
+								<div class="game-end-game-leave-room-wrapper">
+									<button class="game-button" type="button" v-on:click="pageReload(true)">{{ getTranslate('Leave the room') }}</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="game-page-wrapper game-page-error" ref="pageError">
+				<div class="game-content">
+					<div class="game-error-wrapper">
+						<div class="game-widget-wrapper game-error">
+							<div class="game-widget-title-wrapper game-error-title-wrapper">
+								<h3 class="game-widget-title game-error-title">{{ getTranslate('Error') }}</h3>
+								<button class="game-close-page" v-on:click="pageReload()">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512" data-license="https://fontawesome.com/license/free"><path d="M310.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L160 210.7 54.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L114.7 256 9.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L160 301.3 265.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L205.3 256 310.6 150.6z"/></svg>
+								</button>
+							</div>
+							<div class="game-widget-content game-error-content">
+								<div class="game-error-text">
+									<p>{{ getTranslate(errorMessage) }}</p>
+									<button class="game-button" type="button" v-on:click="pageReload()">{{ getTranslate('Reload page') }}</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="game-page-wrapper game-page-settings" ref="pageSettings">
+				<div class="game-content">
+					<div class="game-create-room-wrapper">
+						<div class="game-widget-wrapper game-settings-content-wrapper">
+							<div class="game-widget-title-wrapper game-settings-title-wrapper">
+								<h3 class="game-widget-title game-settings-title">{{ getTranslate('Settings') }}</h3>
+								<button class="game-close-page" v-on:click="pageReload()">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512" data-license="https://fontawesome.com/license/free"><path d="M310.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L160 210.7 54.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L114.7 256 9.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L160 301.3 265.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L205.3 256 310.6 150.6z"/></svg>
+								</button>
+							</div>
+							<div class="game-widget-content game-settings-content">
+								<div class="game-settings-field-wrapper">
+									<h4 class="game-settings-label">{{ getTranslate('Language') }}</h4>
+									<div class="game-settings-text">
+										<select class="game-settings-field" name="lang">
+											<option value="ru" :selected="checkLang('ru')">русский</option>
+											<option value="en" :selected="checkLang('en')">english</option>
+										</select>
+									</div>
+								</div>
+
+								<div class="game-settings-field-wrapper">
+									<button class="game-button" v-on:click="saveSettings">{{ getTranslate('Save') }}</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="game-settings-main-wrapper">
+				<div class="game-settings-wrapper">
+					<button type="button" class="game-settings" v-on:click="App.ServicesLocator.get('Route').redirect('pageSettings')">
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-license="https://fontawesome.com/license/free"><path d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336c44.2 0 80-35.8 80-80s-35.8-80-80-80s-80 35.8-80 80s35.8 80 80 80z"/></svg>
+					</button>
+					<button type="button" class="game-settings game-leave-room" v-on:click="leaveRoom" :style="{'display': ( currentPage == 'pageRoom' ) ? 'block' : 'none'}">
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-license="https://fontawesome.com/license/free"><path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z"/></svg>
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<script src="public/app/Langs/Localization.js"></script>
+	<script src="public/app/Langs/lang.js"></script>
+
+	<script src="public/app/Apps/Draw/DrawController.js"></script>
+	<script src="public/app/Apps/Draw/DrawModel.js"></script>
+	<script src="public/app/Apps/Draw/DrawView.js"></script>
+	<script src="public/app/Apps/Draw/DrawUpdater.js"></script>
+
+	<script src="public/app/Apps/Timers/Timer.js"></script>
+		<script src="public/app/Apps/Timers/RoundTimer.js"></script>
+		<script src="public/app/Apps/Timers/StartGameTimer.js"></script>
+
+	<script src="public/app/Apps/Chat/ChatController.js"></script>
+	<script src="public/app/Apps/Chat/ChatModel.js"></script>
+	<script src="public/app/Apps/Chat/ChatView.js"></script>
+
+	<script src="public/app/Controllers/SocketController.js"></script>
+	<script src="public/app/Controllers/SocketRequestController.js"></script>
+	<script src="public/app/Controllers/SocketResponseController.js"></script>
+
+	<script src="public/app/Entities/Entity.js"></script>
+		<script src="public/app/Entities/Room.js"></script>
+		<script src="public/app/Entities/Player.js"></script>
+
+	<script src="public/app/Managers/CookiesManager.js"></script>
+	<script src="public/app/Managers/LocalStorageManager.js"></script>
+	<script src="public/app/Managers/ServicesLocator.js"></script>
+	<script src="public/app/Managers/RoomsManager.js"></script>
+	<script src="public/app/Managers/PlayersManager.js"></script>
+
+	<script src="public/app/Requests/SocketRequest.js"></script>
+		<script src="public/app/Requests/ChatMessageRequest.js"></script>
+		<script src="public/app/Requests/CreateRoomRequest.js"></script>
+		<script src="public/app/Requests/DrawStateRequest.js"></script>
+		<script src="public/app/Requests/EnterInRoomRequest.js"></script>
+		<script src="public/app/Requests/LeaveRoomRequest.js"></script>
+		<script src="public/app/Requests/SelectWordRequest.js"></script>
+		<script src="public/app/Requests/SocketConnectRequest.js"></script>
+		<script src="public/app/Requests/StartGameRequest.js"></script>
+		<script src="public/app/Requests/UserEnterRequest.js"></script>
+
+	<script src="public/app/Responses/SocketResponse.js"></script>
+		<script src="public/app/Responses/ChatMessageResponse.js"></script>
+		<script src="public/app/Responses/CreateRoomResponse.js"></script>
+		<script src="public/app/Responses/DisconnectResponse.js"></script>
+		<script src="public/app/Responses/DrawStateResponse.js"></script>
+		<script src="public/app/Responses/EndSelectWordResponse.js"></script>
+		<script src="public/app/Responses/EnterInRoomResponse.js"></script>
+		<script src="public/app/Responses/GameEndedResponse.js"></script>
+		<script src="public/app/Responses/GameStartedResponse.js"></script>
+		<script src="public/app/Responses/HintResponse.js"></script>
+		<script src="public/app/Responses/NewRoomResponse.js"></script>
+		<script src="public/app/Responses/PlayerEnterInRoomResponse.js"></script>
+		<script src="public/app/Responses/PlayerLeaveRoomResponse.js"></script>
+		<script src="public/app/Responses/RemoveRoomResponse.js"></script>
+		<script src="public/app/Responses/RoundEndedResponse.js"></script>
+		<script src="public/app/Responses/RoundStartedResponse.js"></script>
+		<script src="public/app/Responses/SocketConnectedResponse.js"></script>
+		<script src="public/app/Responses/StartSelectWordResponse.js"></script>
+		<script src="public/app/Responses/UpdateMainRoomResponse.js"></script>
+		<script src="public/app/Responses/UpdateRoomResponse.js"></script>
+		<script src="public/app/Responses/UserDisconnectResponse.js"></script>
+		<script src="public/app/Responses/UserEnterResponse.js"></script>
+
+	<script src="public/app/Handlers/MiddlewareHandler.js"></script>
+	<script src="public/app/Handlers/SettingsHandler.js"></script>
+	<script src="public/app/Handlers/ChatHandler.js"></script>
+
+	<script src="public/app/Route.js"></script>
+	<script src="public/app/App.js"></script>
+	
+
+	<script src="public/assets/js/socket.io.min.js"></script>
+	<script src="public/assets/js/vue.js"></script>
+	<script src="public/assets/js/main.js"></script>
+</body>
